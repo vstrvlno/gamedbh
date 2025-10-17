@@ -241,10 +241,27 @@ async def handle_choice(callback: types.CallbackQuery):
     await callback.message.edit_text(f"Вы выбрали: {event['choices'][choice_key]['text']}")
     await send_story(callback.message, user_id)
 
+from aiohttp import web
+
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+async def main():
+    app = web.Application()
+    app.router.add_get("/", handle)
+
+    bot_task = asyncio.create_task(dp.start_polling(bot))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", "8080")))
+    await site.start()
+
+    await bot_task
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     try:
-        asyncio.run(dp.start_polling(bot))
+        asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logging.info("Бот остановлен.")
 
