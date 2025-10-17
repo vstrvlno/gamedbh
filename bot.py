@@ -1,6 +1,6 @@
 import os
-import logging
 import asyncio
+import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -11,6 +11,7 @@ from aiohttp import web
 # ----------------------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+PORT = int(os.getenv("PORT", 8080))
 
 if not BOT_TOKEN:
     raise ValueError("❌ BOT_TOKEN не найден в переменных окружения!")
@@ -19,6 +20,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 players = {}
+
 
 # ----------------------------
 # 🧩 Сюжет (100 шагов)
@@ -202,45 +204,46 @@ async def start_game(message: types.Message):
     """Начало новой игры"""
     user_id = message.from_user.id
     players[user_id] = {"current": 1, "status": "playing"}
-    await send_story(message, user_id)
+    await send_story(message.chat.id, user_id)
 
 
-async def send_story(message: types.Message, user_id: int):
+async def send_story(chat_id: int, user_id: int):
     """Отправка текущей сцены пользователю"""
     state = players[user_id]
     current = state["current"]
 
+    # Проверка состояния
     if state["status"] != "playing":
         return
 
     # Проигрыш
     if current == 0:
-        await message.answer("Вы проиграли. Конец истории.")
+        await bot.send_message(chat_id, "Вы проиграли. Конец истории.")
         state["status"] = "lost"
         return
 
     # Победа
     if current == -1:
-        await message.answer("Поздравляем! История завершена успешно!")
+        await bot.send_message(chat_id, "Поздравляем! История завершена успешно!")
         state["status"] = "finished"
         return
 
-    # Получаем событие
     event = story.get(current)
     if not event:
-        await message.answer("История закончилась.")
+        await bot.send_message(chat_id, "История закончилась.")
         state["status"] = "finished"
         return
 
     text = event["text"]
 
-    # ✅ Исправлено: инициализация клавиатуры
+    # Клавиатура с вариантами
     keyboard = InlineKeyboardMarkup(inline_keyboard=[])
     for key, choice in event.get("choices", {}).items():
-        button = InlineKeyboardButton(text=choice["text"], callback_data=key)
-        keyboard.inline_keyboard.append([button])
+        keyboard.inline_keyboard.append([
+            InlineKeyboardButton(text=choice["text"], callback_data=key)
+        ])
 
-    await message.answer(text, reply_markup=keyboard)
+    await bot.send_message(chat_id, text, reply_markup=keyboard)
 
 
 @dp.callback_query()
@@ -252,6 +255,45 @@ async def handle_choice(callback: types.CallbackQuery):
         await callback.answer("Игра неактивна. Наберите /start")
         return
 
+    state = players[user_id]
+    current = state["current"]
+    event = story.get(current)
 
+    if not event:
+        await callback.answer("Ошибка сценария.")
+        return
 
+    choice_key = callback.data
+    if choice_key not in event["choices"]:
+        await callback.answer("Неверный выбор.")
+        return
 
+    next_step = event["choices"][choice_key]["next"]
+    state["current"] = next_step
+
+    await callback.answer()
+    await send_story(callback.message.chat.id, user_id)
+
+# ----------------------------
+# 🌐 Мини веб-сервер (для Render)
+# ----------------------------
+async def handle(request):
+    return web.Response(text="Detroit Game Bot is running!")
+
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    app = web.Application()
+    app.router.add_get("/", handle)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+
+    logging.info(f"🌐 Web server started on port {PORT}")
+    logging.info("🤖 Starting bot polling...")
+
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
