@@ -5,7 +5,8 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import asyncio
 
-API_TOKEN = "ВАШ_ТОКЕН_ТЕЛЕГРАМ"
+bot = Bot(token=os.getenv("BOT_TOKEN"))
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
