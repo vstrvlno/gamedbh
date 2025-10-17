@@ -245,4 +245,9 @@ async def handle_choice(callback: types.CallbackQuery):
     await send_story(callback.message, user_id)
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    try:
+        asyncio.run(dp.start_polling(bot))
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Бот остановлен.")
     asyncio.run(dp.start_polling(bot))
