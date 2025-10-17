@@ -1,10 +1,9 @@
-# dbh_100_steps.py
+import os
 import logging
+import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-import asyncio
-import os
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
@@ -186,8 +185,6 @@ story = {
          "choices": {"a": {"text": "Завершить историю", "next": -1}}}
 }
 
-
-
 @dp.message(Command("start"))
 async def start_game(message: types.Message):
     user_id = message.from_user.id
@@ -250,4 +247,5 @@ if __name__ == "__main__":
         asyncio.run(dp.start_polling(bot))
     except (KeyboardInterrupt, SystemExit):
         logging.info("Бот остановлен.")
-    asyncio.run(dp.start_polling(bot))
+
+
