@@ -271,3 +271,14 @@ story = {
         "choices": {"next_chapter": {"text": "Продолжить в главе 2.", "next": "chapter_2_start"}},
     },
 }
+from chapter2 import Chapter2
+chapter2 = Chapter2(player)
+
+from chapter3 import Chapter3
+chapter3 = Chapter3(player)
+
+from chapter4 import Chapter4
+chapter4 = Chapter4(player)
+
+from chapter5 import Chapter5
+chapter5 = Chapter5(player)
