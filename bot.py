@@ -1,128 +1,142 @@
 import os
 import asyncio
 import logging
-from dotenv import load_dotenv
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
+from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiohttp import web
+from aiogram.enums import ParseMode
+from dotenv import load_dotenv
+from story import story  # ✅ импорт твоего story.py
 
-from story import story  # словарь сцен: { "intro": {"title": "...", "text": "...", "choices":[{"text":"...", "next":"..."}]} }
-
+# ----------------------------
+# 🔧 Настройки
+# ----------------------------
 load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
 
-if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN не найден. Добавь его в Render → Environment.")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("❌ Переменная окружения BOT_TOKEN не найдена!")
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher()
 
-# хранение прогресса пользователей
-user_progress: dict[int, str] = {}
+# Состояние игроков
+players = {}
 
-def create_choice_keyboard(choices, include_nav=False) -> InlineKeyboardMarkup:
-    kb = InlineKeyboardMarkup()
-    for choice in choices:
-        # callback_data должен быть строкой и не длиннее 64 символов
-        kb.add(InlineKeyboardButton(choice["text"], callback_data=str(choice["next"])))
-    if include_nav:
-        kb.row(
-            InlineKeyboardButton("🔄 Начать заново", callback_data="intro"),
-            InlineKeyboardButton("📜 Моя глава", callback_data="current"),
-        )
-    return kb
-
-async def send_scene(event, user_id: int, scene_name: str):
-    scene = story.get(scene_name)
-    logger.info("Send scene %s to user %s: %s", scene_name, user_id, bool(scene))
-
-    if not scene:
-        # для callback используем answer, для сообщений — reply
-        if isinstance(event, types.CallbackQuery):
-            await event.answer("История закончилась 🌌")
-        else:
-            await event.answer("История закончилась 🌌")
-        return
-
-    user_progress[user_id] = scene_name
-
-    text = f"<b>{scene.get('title','')}</b>\n\n{scene.get('text','')}"
-    keyboard = create_choice_keyboard(scene.get("choices", []), include_nav=True)
-
-    # если это callback — редактируем сообщение, иначе отправляем новое сообщение
-    if isinstance(event, types.CallbackQuery):
-        try:
-            await event.message.edit_text(text, reply_markup=keyboard)
-        except Exception as e:
-            # если редактирование не удалось (например, сообщение удалено), отправляем новое
-            logger.warning("Edit failed, sending new message: %s", e)
-            await bot.send_message(chat_id=user_id, text=text, reply_markup=keyboard)
-        await event.answer()
-    else:
-        # event — Message
-        await bot.send_message(chat_id=user_id, text=text, reply_markup=keyboard)
-
+# ----------------------------
+# 🎮 Основная логика игры
+# ----------------------------
 @dp.message(Command("start"))
-async def start_handler(message: types.Message):
+async def start_game(message: types.Message):
+    """Начало игры"""
     user_id = message.from_user.id
-    await message.answer("👋 Добро пожаловать в текстовую игру!\nВыбери свой путь.")
-    await send_scene(message, user_id, "intro")
+    players[user_id] = {"current": 1, "status": "playing"}
 
-@dp.message(Command("admin"))
-async def admin_handler(message: types.Message):
-    if str(message.from_user.id) == str(ADMIN_ID):
-        await message.answer("🔐 Админ-панель активна. Всё работает корректно.")
-    else:
-        await message.answer("⛔ У вас нет доступа к админ-панели.")
+    intro_text = (
+        "🌆 Добро пожаловать в <b>Разрушенный Город</b>.\n\n"
+        "Перед тобой — мир после катастрофы. Твоя цель — добыть вакцину и выжить.\n\n"
+        "Сначала выбери, кто ты:"
+    )
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🧠 Учёный", callback_data="role_scientist")],
+        [InlineKeyboardButton(text="⚔️ Солдат", callback_data="role_soldier")],
+        [InlineKeyboardButton(text="💉 Медик", callback_data="role_medic")],
+        [InlineKeyboardButton(text="🕵️ Разведчик", callback_data="role_scout")]
+    ])
+    await message.answer(intro_text, reply_markup=keyboard)
 
-@dp.callback_query(F.data)
+
+@dp.callback_query()
 async def handle_choice(callback: types.CallbackQuery):
+    """Обработка всех выборов"""
     user_id = callback.from_user.id
-    data = callback.data
-    logger.info("Callback from %s: %s", user_id, data)
 
-    if data == "current":
-        current = user_progress.get(user_id, "intro")
-        await send_scene(callback, user_id, current)
+    # Если игрок ещё не выбрал роль
+    if callback.data.startswith("role_"):
+        role = callback.data.split("_")[1]
+        players[user_id] = {
+            "current": 1,
+            "status": "playing",
+            "role": role
+        }
+        await callback.message.answer(
+            f"Вы выбрали роль: <b>{role.capitalize()}</b>.\n\n"
+            "История начинается..."
+        )
+        await send_story(callback.message, user_id)
+        await callback.answer()
         return
 
-    # если ключа нет в истории — сообщаем пользователю
-    if data not in story and data != "intro" and data != "current":
-        await callback.answer("Неверный выбор или сцена не найдена.", show_alert=True)
+    # Проверяем, активна ли игра
+    if user_id not in players or players[user_id]["status"] != "playing":
+        await callback.answer("Игра неактивна. Напиши /start чтобы начать заново.")
         return
 
-    await send_scene(callback, user_id, data)
+    current_state = players[user_id]["current"]
+    event = story.get(current_state)
 
-# HTTP healthcheck для Render
-async def healthcheck(request):
-    return web.Response(text="Bot is running!")
+    if not event:
+        await callback.message.answer("⚠️ Ошибка сюжета. История обрывается.")
+        players[user_id]["status"] = "finished"
+        await callback.answer()
+        return
 
-def setup_webhook():
-    app = web.Application()
-    app.router.add_get("/", healthcheck)
-    return app
+    # Обработка выбора
+    choice_key = callback.data
+    if choice_key not in event.get("choices", {}):
+        await callback.answer("❌ Недопустимый выбор.")
+        return
 
+    next_step = event["choices"][choice_key]["next"]
+    players[user_id]["current"] = next_step
+
+    # Проверка завершения
+    if next_step == 0:
+        await callback.message.answer("💀 Вы проиграли. История окончена.")
+        players[user_id]["status"] = "lost"
+        await callback.answer()
+        return
+
+    if next_step == -1:
+        await callback.message.answer("🏆 Поздравляем! Вы успешно завершили историю!")
+        players[user_id]["status"] = "finished"
+        await callback.answer()
+        return
+
+    # Иначе продолжаем историю
+    await send_story(callback.message, user_id)
+    await callback.answer()
+
+
+async def send_story(message: types.Message, user_id: int):
+    """Отправка сцены"""
+    state = players[user_id]
+    current = state["current"]
+
+    if current not in story:
+        await message.answer("История завершилась.")
+        state["status"] = "finished"
+        return
+
+    event = story[current]
+    text = f"📖 <b>Сцена {current}</b>\n\n{event['text']}"
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+    for key, choice in event.get("choices", {}).items():
+        btn_text = choice["text"]
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text=btn_text, callback_data=key)])
+
+    await message.answer(text, reply_markup=keyboard)
+
+
+# ----------------------------
+# 🌐 Webhook или Polling (Render-friendly)
+# ----------------------------
 async def main():
-    logger.info("✅ Бот запущен и готов к работе")
-    app = setup_webhook()
+    logging.basicConfig(level=logging.INFO)
+    print("✅ Бот запущен.")
+    await dp.start_polling(bot)
 
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 8080)))
-    await site.start()
-
-    try:
-        await dp.start_polling(bot)
-    finally:
-        await bot.session.close()
-        await runner.cleanup()
 
 if __name__ == "__main__":
     asyncio.run(main())
