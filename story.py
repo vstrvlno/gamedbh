@@ -271,14 +271,26 @@ story = {
         "choices": {"next_chapter": {"text": "Продолжить в главе 2.", "next": "chapter_2_start"}},
     },
 }
-from chapter2 import Chapter2
-chapter2 = Chapter2(player)
+if __name__ == "__main__":
+    player = Player("Игрок")
 
-from chapter3 import Chapter3
-chapter3 = Chapter3(player)
+    chapter1 = Chapter1(player)
+    result1 = chapter1.run()
 
-from chapter4 import Chapter4
-chapter4 = Chapter4(player)
+    if result1 == "next":
+        chapter2 = Chapter2(player)
+        result2 = chapter2.run()
 
-from chapter5 import Chapter5
-chapter5 = Chapter5(player)
+        if result2 == "next":
+            chapter3 = Chapter3(player)
+            result3 = chapter3.run()
+
+            if result3 == "next":
+                chapter4 = Chapter4(player)
+                result4 = chapter4.run()
+
+                if result4 == "next":
+                    chapter5 = Chapter5(player)
+                    chapter5.run()
+
+    print("\nКонец истории.")
