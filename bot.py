@@ -72,12 +72,9 @@ async def send_story(message: types.Message, user_id: int):
 
     # Обычная сцена с выбором
     text = event["text"]
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[])  # корректная инициализация
+    keyboard = InlineKeyboardMarkup()
     for key, choice in event.get("choices", {}).items():
-        # В callback_data включаем номер текущего узла, чтобы выбор был однозначен
-        callback_data = f"{current}|{key}"
-        button = InlineKeyboardButton(text=choice["text"], callback_data=callback_data)
-        keyboard.inline_keyboard.append([button])
+        keyboard.add(InlineKeyboardButton(text=choice["text"][:50], callback_data=key))
 
     await message.answer(text, reply_markup=keyboard)
 
