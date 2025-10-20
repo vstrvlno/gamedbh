@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 
-from story import chapter1, chapter2, chapter3, chapter4, chapter5
+from story import story
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
