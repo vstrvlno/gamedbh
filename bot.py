@@ -2,7 +2,7 @@ import os
 import asyncio
 import logging
 from dotenv import load_dotenv
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.filters import Command
@@ -17,7 +17,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = os.getenv("ADMIN_ID")
 
 if not TOKEN:
-    raise ValueError("❌ Переменная BOT_TOKEN не найдена. Укажи её в Render → Environment.")
+    raise ValueError("❌ BOT_TOKEN не найден. Добавь его в Render → Environment.")
 
 # === Настройка бота ===
 bot = Bot(
@@ -44,10 +44,10 @@ def create_choice_keyboard(choices, include_nav=False):
 
 
 # === Отправка сцены пользователю ===
-async def send_scene(message_or_callback, user_id, scene_name):
+async def send_scene(event, user_id, scene_name):
     scene = story.get(scene_name)
     if not scene:
-        await message_or_callback.answer("История закончилась 🌌")
+        await event.answer("История закончилась 🌌")
         return
 
     user_progress[user_id] = scene_name
@@ -55,11 +55,12 @@ async def send_scene(message_or_callback, user_id, scene_name):
     text = f"<b>{scene['title']}</b>\n\n{scene['text']}"
     keyboard = create_choice_keyboard(scene.get("choices", []), include_nav=True)
 
-    if isinstance(message_or_callback, types.CallbackQuery):
-        await message_or_callback.message.edit_text(text, reply_markup=keyboard)
-        await message_or_callback.answer()
+    # Проверяем тип объекта (сообщение или callback)
+    if isinstance(event, types.CallbackQuery):
+        await event.message.edit_text(text, reply_markup=keyboard)
+        await event.answer()
     else:
-        await message_or_callback.answer(text, reply_markup=keyboard)
+        await event.answer(text, reply_markup=keyboard)
 
 
 # === Команда /start ===
@@ -70,7 +71,7 @@ async def start_handler(message: types.Message):
     await send_scene(message, user_id, "intro")
 
 
-# === Команда /admin (проверка админских прав) ===
+# === Команда /admin ===
 @dp.message(Command("admin"))
 async def admin_handler(message: types.Message):
     if str(message.from_user.id) == str(ADMIN_ID):
@@ -80,7 +81,7 @@ async def admin_handler(message: types.Message):
 
 
 # === Обработка кнопок ===
-@dp.callback_query()
+@dp.callback_query(F.data)
 async def handle_choice(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     data = callback.data
@@ -97,6 +98,7 @@ async def handle_choice(callback: types.CallbackQuery):
 async def healthcheck(request):
     return web.Response(text="Bot is running!")
 
+
 def setup_webhook():
     app = web.Application()
     app.router.add_get("/", healthcheck)
@@ -106,11 +108,10 @@ def setup_webhook():
 # === Основной запуск ===
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("✅ Бот запущен на Render и готов к работе")
+    print("✅ Бот запущен и готов к работе")
 
     app = setup_webhook()
 
-    # Параллельно запускаем aiohttp-сервер и бота
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", int(os.getenv("PORT", 8080)))
