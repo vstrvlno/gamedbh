@@ -6,7 +6,7 @@ from aiogram.filters import Command
 from aiogram.enums import ParseMode
 import asyncio
 
-from story import start_story, get_next_scene, is_story_end
+from story import story
 
 # --- Настройки ---
 logging.basicConfig(level=logging.INFO)
