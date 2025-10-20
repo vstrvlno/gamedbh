@@ -1,78 +1,82 @@
 import os
-import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-from aiogram.filters import Command
-from aiogram.enums import ParseMode
 import asyncio
+import logging
+from dotenv import load_dotenv
+from aiogram import Bot, Dispatcher, types
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
+from aiogram.filters import Command
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
+# Импортируем историю
 from story import story
 
-# --- Настройки ---
-logging.basicConfig(level=logging.INFO)
-
+# === Настройка окружения ===
+load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
 
 if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN не найден. Добавь его в переменные окружения Render!")
+    raise ValueError("❌ BOT_TOKEN не найден. Добавь его в .env на Render")
 
-bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+# === Создаём бота (исправленный вариант для Aiogram 3.7+) ===
+bot = Bot(
+    token=TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+)
+
 dp = Dispatcher()
 
-# --- Игровое состояние пользователей ---
-user_states = {}
-
-# --- Клавиатура выбора ---
-def make_keyboard(options):
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    for opt in options:
-        kb.add(KeyboardButton(opt))
-    return kb
+# === Глобальное хранилище прогресса ===
+user_progress = {}  # {user_id: scene_name}
 
 
-# --- Команда /start ---
-@dp.message(Command("start"))
-async def cmd_start(message: types.Message):
-    user_id = message.from_user.id
-    user_states[user_id] = start_story()
-
-    scene = user_states[user_id]
-    await message.answer(scene["text"], reply_markup=make_keyboard(scene["choices"]))
+# === Функция генерации клавиатуры ===
+def create_choice_keyboard(choices):
+    keyboard = InlineKeyboardMarkup()
+    for choice in choices:
+        keyboard.add(InlineKeyboardButton(choice["text"], callback_data=choice["next"]))
+    return keyboard
 
 
-# --- Обработка ответов ---
-@dp.message()
-async def handle_choice(message: types.Message):
-    user_id = message.from_user.id
-    user_input = message.text.strip()
-
-    if user_id not in user_states:
-        await message.answer("Введите /start, чтобы начать заново.")
+# === Отправка сцены ===
+async def send_scene(message_or_callback, user_id, scene_name):
+    scene = story.get(scene_name)
+    if not scene:
+        await message_or_callback.answer("История закончена 🌌")
         return
 
-    current_scene = user_states[user_id]
-    next_scene = get_next_scene(current_scene, user_input)
+    user_progress[user_id] = scene_name
 
-    if not next_scene:
-        await message.answer("Некорректный выбор. Попробуй ещё раз.", 
-                             reply_markup=make_keyboard(current_scene["choices"]))
-        return
+    text = f"<b>{scene['title']}</b>\n\n{scene['text']}"
+    keyboard = create_choice_keyboard(scene.get("choices", []))
 
-    user_states[user_id] = next_scene
-    text = next_scene["text"]
-
-    # Проверка конца сюжета
-    if is_story_end(next_scene):
-        await message.answer(text + "\n\n<b>Конец истории.</b>")
-        user_states.pop(user_id, None)
+    if isinstance(message_or_callback, types.CallbackQuery):
+        await message_or_callback.message.edit_text(text, reply_markup=keyboard)
+        await message_or_callback.answer()
     else:
-        await message.answer(text, reply_markup=make_keyboard(next_scene["choices"]))
+        await message_or_callback.answer(text, reply_markup=keyboard)
 
 
-# --- Запуск бота ---
+# === Команда /start ===
+@dp.message(Command("start"))
+async def start_handler(message: types.Message):
+    await send_scene(message, message.from_user.id, "intro")
+
+
+# === Обработка нажатий кнопок ===
+@dp.callback_query()
+async def handle_choice(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    next_scene = callback.data
+    await send_scene(callback, user_id, next_scene)
+
+
+# === Основной запуск ===
 async def main():
+    logging.basicConfig(level=logging.INFO)
+    print("✅ Бот запущен и готов к работе")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
