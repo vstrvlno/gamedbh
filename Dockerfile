@@ -1,30 +1,21 @@
-# Use official Python slim image
+# Используем лёгкий базовый образ Python
 FROM python:3.11-slim
 
-# Avoid buffering, show logs immediately
-ENV PYTHONUNBUFFERED=1
-ENV PORT=8080
+# Устанавливаем системные зависимости
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
 
-# Install apt dependencies required for building some wheels (kept minimal)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    libffi-dev \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
+# Рабочая директория
 WORKDIR /app
 
-# Copy requirements and install
+# Копируем зависимости
 COPY requirements.txt .
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
 
-# Copy app
+# Устанавливаем зависимости без кеша
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Копируем весь код
 COPY . .
 
-# Expose port used by aiohttp health endpoint
-EXPOSE 8080
-
-# Default command - runs bot.py which creates aiohttp listener on $PORT
+# Указываем команду запуска
+# Render автоматически назначает порт, но aiogram использует polling, поэтому порт не нужен
 CMD ["python", "bot.py"]
