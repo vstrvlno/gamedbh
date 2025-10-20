@@ -1,296 +1,78 @@
-story = {
-    "intro": {
-        "text": (
-            "Год 2089. После биокатастрофы, вызванной вирусом «Эпсилон», "
-            "90% населения Земли исчезло. Города превратились в пустыни бетона.\n\n"
-            "Ты стоишь на окраине разрушенного мегаполиса. "
-            "Твоя цель — найти вакцину в центральной лаборатории 'Астра-9'.\n\n"
-            "Но прежде чем сделать первый шаг, выбери, кто ты:"
-        ),
-        "choices": {
-            "soldier": {"text": "Солдат — бывший офицер обороны.", "next": "ch1_arrival", "role": "soldier"},
-            "scientist": {"text": "Учёный — участвовал в создании вируса.", "next": "ch1_arrival", "role": "scientist"},
-            "scout": {"text": "Разведчик — выжил благодаря ловкости и скрытности.", "next": "ch1_arrival", "role": "scout"},
-        },
-    },
+import os
+import logging
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.filters import Command
+from aiogram.enums import ParseMode
+import asyncio
 
-    "ch1_arrival": {
-        "text": (
-            "Ты входишь в город. Пепел скрипит под ногами. "
-            "Ветер несёт запах гнили и ржавчины.\n"
-            "На перекрёстке видны три пути:\n"
-            "— направо к разбитому мосту,\n"
-            "— налево в подземку,\n"
-            "— прямо к выжженным улицам центра."
-        ),
-        "choices": {
-            "right": {"text": "Пойти к мосту.", "next": "bridge_ruins"},
-            "left": {"text": "Спуститься в подземку.", "next": "metro_entrance"},
-            "forward": {"text": "Пойти по главной улице.", "next": "main_street"},
-        },
-    },
+from story import start_story, get_next_scene, is_story_end
 
-    "bridge_ruins": {
-        "text": (
-            "Мост разрушен. Внизу — тёмная река и обломки машин.\n"
-            "На противоположной стороне мелькает фигура — возможно, человек.\n"
-            "Но как добраться туда?"
-        ),
-        "choices": {
-            "shout": {"text": "Крикнуть — вдруг услышит.", "next": "bridge_shout"},
-            "climb": {"text": "Попробовать перелезть по арке.", "next": "bridge_climb"},
-            "back": {"text": "Вернуться к перекрёстку.", "next": "ch1_arrival"},
-        },
-    },
+# --- Настройки ---
+logging.basicConfig(level=logging.INFO)
 
-    "bridge_shout": {
-        "text": (
-            "Ты кричишь, но фигура не отвечает. "
-            "Вместо этого слышится гулкий рев — заражённые поблизости услышали тебя.\n"
-            "Из-за угла выбегают двое мутантов."
-        ),
-        "choices": {
-            "fight": {"text": "Сразиться с ними.", "next": "bridge_fight"},
-            "run": {"text": "Бежать прочь!", "next": "bridge_escape"},
-        },
-    },
+TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = os.getenv("ADMIN_ID")
 
-    "bridge_fight": {
-        "text": (
-            "Ты достаёшь оружие. Бой короткий, но жестокий.\n"
-            "Ты побеждаешь, но теряешь немного здоровья."
-        ),
-        "choices": {
-            "search": {"text": "Обыскать тела.", "next": "bridge_loot"},
-            "return": {"text": "Вернуться назад.", "next": "ch1_arrival"},
-        },
-    },
+if not TOKEN:
+    raise ValueError("❌ BOT_TOKEN не найден. Добавь его в переменные окружения Render!")
 
-    "bridge_loot": {
-        "text": (
-            "На одном из тел ты находишь флягу с водой и батарею.\n"
-            "Энергия пригодится позже. Ты чувствуешь усталость, но идёшь дальше."
-        ),
-        "choices": {
-            "continue": {"text": "Продолжить путь по мосту.", "next": "bridge_end"},
-        },
-    },
+bot = Bot(token=TOKEN, parse_mode=ParseMode.HTML)
+dp = Dispatcher()
 
-    "bridge_end": {
-        "text": (
-            "Ты добираешься до середины моста. "
-            "Под тобой — чёрная бездна, вокруг — гул воды.\n"
-            "Мост трещит. Нужно решать быстро."
-        ),
-        "choices": {
-            "jump": {"text": "Прыгнуть на другую сторону.", "next": "bridge_jump"},
-            "retreat": {"text": "Вернуться, пока не поздно.", "next": "ch1_arrival"},
-        },
-    },
+# --- Игровое состояние пользователей ---
+user_states = {}
 
-    "bridge_jump": {
-        "text": (
-            "Ты разбегаешься и прыгаешь. Сердце замирает... "
-            "Ты хватаешься за край бетона и подтягиваешься.\n"
-            "На другой стороне лежит мёртвый солдат с рюкзаком.\n"
-            "Внутри — старый планшет с координатами 'Астра-9'."
-        ),
-        "choices": {
-            "take_tablet": {"text": "Взять планшет и уйти в центр.", "next": "main_street"},
-        },
-    },
+# --- Клавиатура выбора ---
+def make_keyboard(options):
+    kb = ReplyKeyboardMarkup(resize_keyboard=True)
+    for opt in options:
+        kb.add(KeyboardButton(opt))
+    return kb
 
-    "bridge_escape": {
-        "text": (
-            "Ты бросаешься прочь. Мутанты преследуют тебя, но ты успеваешь спрятаться за автобусом.\n"
-            "Дышишь тяжело. Спасся... но потерял часть снаряжения.\n"
-            "Возвращаешься к перекрёстку."
-        ),
-        "choices": {
-            "back": {"text": "Идти в другое направление.", "next": "ch1_arrival"},
-        },
-    },
 
-    "metro_entrance": {
-        "text": (
-            "Ты спускаешься в подземку. Темно и сыро. "
-            "На стенах — следы крови и старые надписи: 'Не спускайся глубже!'\n"
-            "Из туннеля слышны шаги."
-        ),
-        "choices": {
-            "hide": {"text": "Спрятаться за колонной.", "next": "metro_hide"},
-            "call": {"text": "Позвать — вдруг это человек.", "next": "metro_call"},
-            "return": {"text": "Вернуться наверх.", "next": "ch1_arrival"},
-        },
-    },
+# --- Команда /start ---
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    user_id = message.from_user.id
+    user_states[user_id] = start_story()
 
-    "metro_hide": {
-        "text": (
-            "Ты затаился. Мимо проходит бродяга с самодельным копьём.\n"
-            "Он не замечает тебя. Когда он уходит, ты видишь ящик с метками ООН."
-        ),
-        "choices": {
-            "open": {"text": "Открыть ящик.", "next": "metro_box"},
-            "leave": {"text": "Не трогать и идти дальше.", "next": "metro_tunnel"},
-        },
-    },
+    scene = user_states[user_id]
+    await message.answer(scene["text"], reply_markup=make_keyboard(scene["choices"]))
 
-    "metro_box": {
-        "text": (
-            "Внутри — запечатанные пакеты с медициной и дозиметр.\n"
-            "Ты берёшь немного припасов и идёшь дальше.\n"
-            "Туннель ведёт к старой станции."
-        ),
-        "choices": {
-            "continue": {"text": "Двигаться к станции.", "next": "metro_tunnel"},
-        },
-    },
 
-    "metro_call": {
-        "text": (
-            "Ты зовёшь. Из темноты выходит человек в противогазе.\n"
-            "Он говорит хриплым голосом: 'Не ори... тут не одни мы.'\n"
-            "Он предлагает обмен — информацию на припасы."
-        ),
-        "choices": {
-            "trade": {"text": "Согласиться на обмен.", "next": "metro_trade"},
-            "decline": {"text": "Отказаться и уйти.", "next": "metro_tunnel"},
-        },
-    },
+# --- Обработка ответов ---
+@dp.message()
+async def handle_choice(message: types.Message):
+    user_id = message.from_user.id
+    user_input = message.text.strip()
 
-    "metro_trade": {
-        "text": (
-            "Ты отдаёшь ему воду. Он сообщает, что вход в лабораторию под башней заперт, "
-            "но можно пробраться через канализацию.\n"
-            "Он уходит, оставляя карту с маршрутом."
-        ),
-        "choices": {
-            "up": {"text": "Подняться на поверхность.", "next": "main_street"},
-        },
-    },
+    if user_id not in user_states:
+        await message.answer("Введите /start, чтобы начать заново.")
+        return
 
-    "metro_tunnel": {
-        "text": (
-            "Ты идёшь по туннелю. С потолка капает вода. "
-            "Слышен рев мутанта. Он перекрывает путь.\n"
-            "Ты можешь сразиться или искать обход."
-        ),
-        "choices": {
-            "fight": {"text": "Сразиться с мутантом.", "next": "metro_battle"},
-            "sneak": {"text": "Пробраться мимо.", "next": "metro_sneak"},
-        },
-    },
+    current_scene = user_states[user_id]
+    next_scene = get_next_scene(current_scene, user_input)
 
-    "metro_battle": {
-        "text": (
-            "Ты вступаешь в бой. Мутант огромен, но ты уклоняешься и наносишь удар.\n"
-            "После долгой схватки побеждаешь, но получаешь ранения."
-        ),
-        "choices": {
-            "exit": {"text": "Подняться на поверхность через шахту.", "next": "main_street"},
-        },
-    },
+    if not next_scene:
+        await message.answer("Некорректный выбор. Попробуй ещё раз.", 
+                             reply_markup=make_keyboard(current_scene["choices"]))
+        return
 
-    "metro_sneak": {
-        "text": (
-            "Ты крадёшься мимо мутанта, задерживая дыхание.\n"
-            "Он рычит, но не замечает тебя. Ты выходишь к шахте."
-        ),
-        "choices": {
-            "climb": {"text": "Подняться на поверхность.", "next": "main_street"},
-        },
-    },
+    user_states[user_id] = next_scene
+    text = next_scene["text"]
 
-    "main_street": {
-        "text": (
-            "Ты выходишь на главную улицу. Впереди виднеется башня лаборатории.\n"
-            "Но дорогу перекрывает баррикада и несколько вооружённых выживших."
-        ),
-        "choices": {
-            "approach": {"text": "Подойти и поговорить.", "next": "camp_talk"},
-            "hide": {"text": "Обойти с тыла.", "next": "camp_sneak"},
-        },
-    },
+    # Проверка конца сюжета
+    if is_story_end(next_scene):
+        await message.answer(text + "\n\n<b>Конец истории.</b>")
+        user_states.pop(user_id, None)
+    else:
+        await message.answer(text, reply_markup=make_keyboard(next_scene["choices"]))
 
-    "camp_talk": {
-        "text": (
-            "Лидер выживших смотрит на тебя подозрительно. "
-            "'Ты кто такой? Зачем идёшь в башню?'\n"
-            "От твоего ответа зависит всё."
-        ),
-        "choices": {
-            "truth": {"text": "Сказать правду о вакцине.", "next": "camp_truth"},
-            "lie": {"text": "Солгать, что ищешь еду.", "next": "camp_lie"},
-        },
-    },
 
-    "camp_truth": {
-        "text": (
-            "Они переглядываются. Лидер вздыхает: 'Если правда, что ты спасёшь нас... держи ключ.'\n"
-            "Он даёт тебе доступ к канализации под башней."
-        ),
-        "choices": {
-            "go_tower": {"text": "Идти к лаборатории.", "next": "tower_entrance"},
-        },
-    },
+# --- Запуск бота ---
+async def main():
+    await dp.start_polling(bot)
 
-    "camp_lie": {
-        "text": (
-            "Лидер хмурится. 'Врёшь. Мы видели таких — мародёров.'\n"
-            "Он даёт сигнал, и выжившие поднимают оружие."
-        ),
-        "choices": {
-            "fight": {"text": "Сражаться.", "next": "death_camp"},
-            "flee": {"text": "Бежать в переулок.", "next": "tower_entrance"},
-        },
-    },
-
-    "death_camp": {
-        "text": (
-            "Пули пронзают тело. Всё темнеет. "
-            "Ты слышишь гул города, уходящий вдаль.\n\n❌ ТЫ ПОГИБ."
-        ),
-        "choices": {"restart": {"text": "Начать заново.", "next": "intro"}},
-    },
-
-    "camp_sneak": {
-        "text": (
-            "Ты обходишь лагерь и находишь люк, ведущий под землю. "
-            "Путь к лаборатории открыт."
-        ),
-        "choices": {"enter": {"text": "Спуститься в канализацию.", "next": "tower_entrance"}},
-    },
-
-    "tower_entrance": {
-        "text": (
-            "Ты стоишь перед входом в башню 'Астра-9'. "
-            "Из глубины доносится механический гул. "
-            "Твоя судьба решится внутри.\n\n"
-            "— Конец главы 1 —"
-        ),
-        "choices": {"next_chapter": {"text": "Продолжить в главе 2.", "next": "chapter_2_start"}},
-    },
-}
 if __name__ == "__main__":
-    player = Player("Игрок")
-
-    chapter1 = Chapter1(player)
-    result1 = chapter1.run()
-
-    if result1 == "next":
-        chapter2 = Chapter2(player)
-        result2 = chapter2.run()
-
-        if result2 == "next":
-            chapter3 = Chapter3(player)
-            result3 = chapter3.run()
-
-            if result3 == "next":
-                chapter4 = Chapter4(player)
-                result4 = chapter4.run()
-
-                if result4 == "next":
-                    chapter5 = Chapter5(player)
-                    chapter5.run()
-
-    print("\nКонец истории.")
+    asyncio.run(main())
