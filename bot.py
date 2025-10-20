@@ -104,6 +104,12 @@ async def handle_choice(callback: types.CallbackQuery):
 
     choice_key = parts[1]
 
+    
+    # 💾 Сохраняем выбранную роль, если она есть
+    if "role" in choice:
+        players[user_id]["role"] = choice["role"]
+
+    
     event = story.get(node)
     if not event or "choices" not in event:
         await callback.answer("Этот выбор уже неактуален.", show_alert=False)
